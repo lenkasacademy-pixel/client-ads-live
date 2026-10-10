@@ -218,6 +218,56 @@ def client_report(client: dict, hour: int) -> dict:
     }
 
 
+def unseal(text: str, key_b64: str) -> dict:
+    key = base64.urlsafe_b64decode(key_b64 + "=" * (-len(key_b64) % 4))
+    raw = base64.b64decode(text.strip())
+    return json.loads(AESGCM(key).decrypt(raw[:12], raw[12:], None))
+
+
+def hourly(reports: list[dict], now: datetime) -> dict:
+    """New results and spend per client since about an hour ago.
+
+    Compares against snapshots the earlier runs left (prev_hist.enc, from the data
+    branch): the latest one today at least 55 minutes old, else today's earliest.
+    """
+    today = now.date().isoformat()
+    try:
+        with open("prev_hist.enc") as f:
+            history = unseal(f.read(), CONFIG["masterKey"]).get("snapshots", [])
+    except Exception:
+        history = []
+    snap = {
+        "at": now.isoformat(timespec="seconds"),
+        "date": today,
+        "clients": {
+            r["slug"]: {
+                "spend": (r.get("today") or {}).get("spend", 0),
+                "results": {l["label"]: l["count"] for l in (r.get("today") or {}).get("results", [])},
+            }
+            for r in reports
+        },
+    }
+    same_day = [h for h in history if h.get("date") == today]
+    old = [h for h in same_day if (now - datetime.fromisoformat(h["at"])).total_seconds() >= 55 * 60]
+    base = max(old, key=lambda h: h["at"]) if old else (min(same_day, key=lambda h: h["at"]) if same_day else None)
+
+    rows = []
+    for r in reports:
+        cur = snap["clients"][r["slug"]]
+        prev = (base or {}).get("clients", {}).get(r["slug"], {"spend": 0, "results": {}})
+        gains = [
+            {"label": label, "count": n - prev["results"].get(label, 0)}
+            for label, n in cur["results"].items()
+            if n - prev["results"].get(label, 0) > 0
+        ]
+        rows.append({"name": r["name"], "gains": gains, "spent": max(0, cur["spend"] - prev["spend"])})
+
+    keep = [h for h in same_day if (now - datetime.fromisoformat(h["at"])).total_seconds() < 4 * 3600]
+    with open("out/hist.enc", "w") as f:
+        f.write(seal({"snapshots": keep + [snap]}, CONFIG["masterKey"]))
+    return {"from": base["at"] if base else None, "to": snap["at"], "rows": rows}
+
+
 def seal(doc: dict, key_b64: str) -> str:
     key = base64.urlsafe_b64decode(key_b64 + "=" * (-len(key_b64) % 4))
     iv = os.urandom(12)
@@ -244,8 +294,9 @@ def main() -> None:
     os.makedirs("out", exist_ok=True)
     # The owner's file carries each client's key, so the owner page can hand out their links.
     owner = [{**r, "key": c["key"]} for c, r in zip(clients, reports)]
+    hour = hourly(reports, now)
     with open("out/all.enc", "w") as f:
-        f.write(seal({"generatedAt": generated, "clients": owner}, CONFIG["masterKey"]))
+        f.write(seal({"generatedAt": generated, "clients": owner, "hourly": hour}, CONFIG["masterKey"]))
     for c, r in zip(clients, reports):
         # A client sees its own numbers, never the internal alerts.
         mine = {**r, "anomalies": []}

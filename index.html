@@ -70,6 +70,33 @@
   .share a { background: var(--accent); color: #fff; border: 1px solid var(--accent); }
   .share button { background: none; color: var(--ink); border: 1px solid var(--line); }
   .share button.done { color: var(--good); border-color: var(--good); }
+  /* Owner view: panels then a grid of compact cards */
+  .panel { border: 1px solid var(--c); border-radius: 12px; padding: 12px 14px; margin-bottom: 12px; background: color-mix(in srgb, var(--c) 5%, var(--card)); }
+  .panel h2 { font-size: 15px; margin: 0 0 6px; color: var(--c); }
+  .panel h2.plain { color: var(--ink); }
+  .item { padding: 2px 0; font-size: 14px; }
+  .item .dot { color: var(--c); }
+  .item b { font-weight: 600; }
+  .item .t { color: var(--c); }
+  .more { background: none; border: 0; color: var(--muted); font: inherit; font-size: 13px; padding: 4px 0 0; cursor: pointer; text-decoration: underline; }
+  .mini-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); gap: 10px; }
+  .mini { border: 1px solid var(--c); border-radius: 12px; padding: 10px 12px; background: var(--card); display: flex; flex-direction: column; gap: 3px; min-width: 0; font-size: 14px; }
+  .mini .top { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 2px; }
+  .mini .top b { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mini .top span { color: var(--c); font-size: 12px; font-weight: 700; white-space: nowrap; }
+  .mini .r { display: flex; gap: 8px; align-items: center; white-space: nowrap; min-width: 0; }
+  .mini .k { color: var(--muted); width: 52px; flex: none; overflow: hidden; text-overflow: ellipsis; }
+  .mini .v { overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+  .mini .v strong { font-weight: 700; }
+  .mini .g { color: var(--good); font-weight: 600; }
+  .mini .mb { width: 80px; height: 14px; flex: none; background: repeating-linear-gradient(90deg, var(--track) 0 2px, transparent 2px 4px); border-radius: 2px; overflow: hidden; }
+  .mini .mb i { display: block; height: 100%; background: var(--b); }
+  .mini .mt { color: var(--b); overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+  .mini .al { color: var(--a); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 2px; }
+  .mini .links { display: flex; gap: 12px; margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--line); font-size: 12px; }
+  .mini .links a, .mini .links button { color: var(--muted); background: none; border: 0; padding: 0; font: inherit; cursor: pointer; text-decoration: none; }
+  .mini .links a:hover, .mini .links button:hover { color: var(--accent); }
+  .mini .links button.done { color: var(--good); }
   button.theme { background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 8px; padding: 4px 10px; font: inherit; font-size: 12px; cursor: pointer; }
 </style>
 </head>
@@ -200,7 +227,161 @@ async function decrypt(text, keyB64) {
   return JSON.parse(new TextDecoder().decode(plain));
 }
 
+// ── Owner view: alerts, sales, hourly, compact cards ─────────────────────
+const SHORT = {
+  'Phone calls placed': 'Calls', 'In-app registrations completed': 'Sign-ups', 'Website purchases': 'Sales',
+  'Purchases': 'Sales', 'Messaging conversations started': 'Chats', 'Leads': 'Leads', 'Website leads': 'Leads',
+};
+const short = l => SHORT[l] || l;
+const isSale = l => /purchase/i.test(l || '');
+const daysText = d => d < 1 ? `~${Math.max(1, Math.round(d * 24))} h` : `~${d.toFixed(1)} days`;
+
+function ownerStatus(r) {
+  const cap = r.cap ? capState(r.cap, r.yesterday?.spend || 0) : null;
+  const daily = level(r.today?.spend || 0, r.limit);
+  const issues = r.anomalies || [];
+  if (r.error) return { text: 'NO DATA', c: C.warning, rank: 3 };
+  if (cap && cap.left <= 0) return { text: 'LIMIT HIT', c: C.error, rank: 0 };
+  if (cap?.tone === 'over') return { text: 'RUNNING OUT', c: C.error, rank: 1 };
+  if (daily === 'over' || issues.some(a => a.tone === 'error')) return { text: 'ATTENTION', c: C.error, rank: 2 };
+  if (cap?.tone === 'near') return { text: 'LIMIT LOW', c: C.warning, rank: 3 };
+  if (daily === 'near' || issues.length) return { text: 'CHECK', c: C.warning, rank: 4 };
+  if (!(r.today?.spend) && !(r.yesterday?.spend)) return { text: 'IDLE', c: C.idle, rank: 6 };
+  return { text: 'ON TRACK', c: C.success, rank: 5 };
+}
+
+/** Every alert worth reading, red first: spending limit, daily budget, then the anomaly checks. */
+function alertsOf(r) {
+  const out = [];
+  if (r.cap) {
+    const c = capState(r.cap, r.yesterday?.spend || 0);
+    if (c.left <= 0) out.push({ tone: 'error', text: 'Spending limit hit: ads have stopped' });
+    else if (c.tone === 'over') out.push({ tone: 'error', text: `Spending limit runs out in ${daysText(c.days)} (${rupees(c.left)} left)` });
+    else if (c.tone === 'near') out.push({ tone: 'warning', text: `Spending limit low: ${rupees(c.left)} left${Number.isFinite(c.days) ? `, out in ${daysText(c.days)}` : ''}` });
+  }
+  const spend = r.today?.spend || 0, lv = level(spend, r.limit);
+  if (lv === 'over') out.push({ tone: 'error', text: `Over daily budget: ${rupees(spend)} of ${rupees(r.limit)}` });
+  else if (lv === 'near') out.push({ tone: 'warning', text: `Near daily budget: ${Math.round(spend / r.limit * 100)}% of ${rupees(r.limit)}` });
+  for (const a of r.anomalies || []) out.push(a);
+  return out;
+}
+
+function miniBar(used, color, text) {
+  const pct = Math.max(0, Math.min(100, used * 100));
+  return `<span class="mb" style="--b:${color}"><i style="width:${pct}%"></i></span><span class="mt" style="--b:${color}">${esc(text)}</span>`;
+}
+
+function mini(r) {
+  const st = ownerStatus(r), y = r.yesterday, t = r.today;
+  const all = [...(y?.results || []), ...(t?.results || [])];
+  const top = all.sort((a, b) => b.count - a.count)[0]?.label;
+  const cnt = (d, l) => d?.results.find(x => x.label === l);
+  const tl = top ? cnt(t, top) : null;
+  const res = top
+    ? `<div class="r"><span class="k">${esc(short(top))}</span><span class="v">${num(cnt(y, top)?.count)} → <span class="g">${num(tl?.count)}</span>${tl ? ` @ ${rupees(tl.spend / tl.count)}` : ''}</span></div>`
+    : `<div class="r"><span class="k">Results</span><span class="v">0 → <span class="g">0</span></span></div>`;
+  const spend = t?.spend || 0, lv = level(spend, r.limit);
+  const daily = lv === 'none'
+    ? miniBar(0, C.idle, r.hasLifetime ? 'lifetime budget only' : 'no active daily budget')
+    : miniBar(spend / r.limit, lv === 'over' ? C.error : lv === 'near' ? C.warning : C.success,
+        `${Math.round(spend / r.limit * 100)}% of ${rupees(r.limit)}${r.hasLifetime ? ' +LT' : ''}`);
+  let cap = miniBar(0, C.idle, 'no limit set');
+  if (r.cap) {
+    const c = capState(r.cap, y?.spend || 0);
+    cap = miniBar(r.cap.spent / r.cap.limit, c.tone === 'over' ? C.error : c.tone === 'near' ? C.warning : C.success,
+      `${rupees(c.left)} left${Number.isFinite(c.days) ? ` · ~${c.days < 10 ? c.days.toFixed(1) : Math.round(c.days)}d` : ''}`);
+  }
+  const first = alertsOf(r)[0];
+  return `<article class="mini" style="--c:${st.c}">
+    <div class="top"><b title="${esc(r.name)}">${esc(r.name)}</b><span>● ${st.text}</span></div>
+    ${r.error && !t ? `<div class="err">Couldn't load from Meta; retrying every 15 min.</div>` : `
+    <div class="r"><span class="k">Spend</span><span class="v">${rupees(y?.spend)} → <strong>${rupees(t?.spend)}</strong></span></div>
+    ${res}
+    <div class="r"><span class="k">Daily</span>${daily}</div>
+    <div class="r"><span class="k">Limit</span>${cap}</div>`}
+    ${first ? `<div class="al" style="--a:${C[first.tone]}" title="${esc(first.text)}">▲ ${esc(first.text)}</div>` : ''}
+    ${r.key ? `<div class="links"><a href="${esc(clientLink(r))}" target="_blank" rel="noopener">Open client page ↗</a><button type="button" data-copy="${esc(clientLink(r))}">Copy client link</button></div>` : ''}
+  </article>`;
+}
+
+let showAllAlerts = false;
+function renderOwner(doc) {
+  const list = [...doc.clients].sort((a, b) => ownerStatus(a).rank - ownerStatus(b).rank ||
+    ((b.today?.spend || 0) + (b.yesterday?.spend || 0)) - ((a.today?.spend || 0) + (a.yesterday?.spend || 0)));
+  const gen = new Date(doc.generatedAt);
+  const ageMin = (Date.now() - gen) / 60000;
+  const ist = d => new Date(d).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false });
+  const when = gen.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' });
+  const sum = k => list.reduce((s, r) => s + (r[k]?.spend || 0), 0);
+  document.title = 'Ads Live';
+
+  // Alerts: red first, then amber.
+  const alerts = list.flatMap(r => alertsOf(r).map(a => ({ ...a, name: r.name })))
+    .sort((a, b) => (a.tone === 'error' ? 0 : 1) - (b.tone === 'error' ? 0 : 1));
+  const shown = showAllAlerts ? alerts : alerts.slice(0, 5);
+  const alertPanel = alerts.length ? `<section class="panel" style="--c:${C.error}">
+    <h2>🔔 Alerts · ${alerts.length}</h2>
+    ${shown.map(a => `<div class="item" style="--c:${C[a.tone]}"><span class="dot">●</span> <b>${esc(a.name)}</b> · <span class="t">${esc(a.text)}</span></div>`).join('')}
+    ${alerts.length > 5 ? `<button class="more" id="more">${showAllAlerts ? 'Show fewer' : `+${alerts.length - 5} more: show all`}</button>` : ''}
+  </section>` : `<section class="panel" style="--c:${C.success}"><h2>✓ No alerts</h2><div class="item">Every client is within budget and limit.</div></section>`;
+
+  // Sales: clients whose results are purchases.
+  const salesClients = list.filter(r => [...(r.today?.results || []), ...(r.yesterday?.results || [])].some(l => isSale(l.label)));
+  const salesToday = r => (r.today?.results || []).filter(l => isSale(l.label)).reduce((s, l) => s + l.count, 0);
+  const newSales = (doc.hourly?.rows || []).reduce((s, row) => s + row.gains.filter(g => isSale(g.label)).reduce((x, g) => x + g.count, 0), 0);
+  const salesPanel = salesClients.length ? `<section class="panel" style="--c:${C.success}">
+    <h2>🎉 Sales today · ${salesClients.reduce((s, r) => s + salesToday(r), 0)}${doc.hourly?.from ? ` <span class="muted" style="font-weight:400">(${newSales} new in the last hour)</span>` : ''}</h2>
+    ${salesClients.map(r => `<div class="item" style="--c:${C.success}"><span class="dot">●</span> <b>${esc(r.name)}</b> <span class="t">${num(salesToday(r))} sale${salesToday(r) === 1 ? '' : 's'}</span> · ${rupees(r.today?.spend)} spent</div>`).join('')}
+  </section>` : '';
+
+  // Hourly: what changed since about an hour ago.
+  let hourPanel = '';
+  const h = doc.hourly;
+  if (h) {
+    const rows = h.rows || [];
+    const active = rows.filter(x => x.gains.length || x.spent > 0.5)
+      .sort((a, b) => (b.gains.length ? 1 : 0) - (a.gains.length ? 1 : 0) || b.spent - a.spent);
+    const quiet = rows.filter(x => !active.includes(x)).map(x => x.name);
+    hourPanel = `<section class="panel" style="--c:var(--line)">
+      <h2 class="plain">⏱ Hourly · ${h.from ? `${ist(h.from)} → ${ist(h.to)} IST` : 'starts after the next refresh'}</h2>
+      ${h.from ? active.map(x => `<div class="item" style="--c:${x.gains.length ? C.success : C.warning}"><span class="dot">●</span> <b>${esc(x.name)}</b> ${x.gains.length
+          ? x.gains.map(g => `<span class="g" style="color:var(--good)">+${num(g.count)} ${esc(short(g.label).toLowerCase())}</span>`).join(', ')
+          : '<span class="t">no results</span>'} · ${rupees(x.spent)} spent</div>`).join('') : ''}
+      ${h.from && quiet.length ? `<div class="item muted">Quiet: ${quiet.map(esc).join(', ')}</div>` : ''}
+    </section>`;
+  }
+
+  app.innerHTML = `
+    <header>
+      <div>
+        <h1>Client ads · live</h1>
+        <div class="sub">Updated ${when} IST · refreshes every 15 min${ageMin > 45 ? ` · <span class="stale">last update ${Math.round(ageMin)} min ago</span>` : ''}</div>
+      </div>
+      <div class="totals">
+        <div class="tile"><span>Today</span><b>${rupees(sum('today'))}</b></div>
+        <div class="tile"><span>Yesterday</span><b>${rupees(sum('yesterday'))}</b></div>
+        <div class="tile"><span>Clients</span><b>${list.length}</b></div>
+      </div>
+    </header>
+    ${alertPanel}${salesPanel}${hourPanel}
+    <div class="mini-grid">${list.map(mini).join('')}</div>
+    <footer>Numbers from Meta Ads; "today" can lag Meta by 15–30 min. <button class="theme" id="theme">Light / dark</button></footer>`;
+  const more = document.getElementById('more');
+  if (more) more.onclick = () => { showAllAlerts = !showAllAlerts; renderOwner(doc); };
+  bindTheme();
+}
+
+function bindTheme() {
+  document.getElementById('theme').onclick = () => {
+    const dark = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() === '#161614';
+    const next = dark ? 'light' : 'dark';
+    document.documentElement.dataset.theme = next;
+    try { localStorage.setItem('theme', next); } catch (e) {}
+  };
+}
+
 function render(doc) {
+  if (isOwner) return renderOwner(doc);
   const list = [...doc.clients].sort((a, b) => status(a).rank - status(b).rank ||
     ((b.today?.spend || 0) + (b.yesterday?.spend || 0)) - ((a.today?.spend || 0) + (a.yesterday?.spend || 0)));
   const gen = new Date(doc.generatedAt);

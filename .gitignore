@@ -1,3 +1,4 @@
 .secrets/
 out/
 __pycache__/
+prev_hist.enc

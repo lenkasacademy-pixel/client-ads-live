@@ -18,6 +18,8 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install --quiet cryptography==43.0.3
+      - name: Last run's snapshots, for the hourly view
+        run: git fetch -q --depth=1 origin data && git show FETCH_HEAD:hist.enc > prev_hist.enc || true
       - name: Fetch from Meta and encrypt
         env:
           META_TOKEN: ${{ secrets.META_TOKEN }}
