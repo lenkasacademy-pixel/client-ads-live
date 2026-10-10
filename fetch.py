@@ -242,8 +242,10 @@ def main() -> None:
 
     generated = now.isoformat(timespec="seconds")
     os.makedirs("out", exist_ok=True)
+    # The owner's file carries each client's key, so the owner page can hand out their links.
+    owner = [{**r, "key": c["key"]} for c, r in zip(clients, reports)]
     with open("out/all.enc", "w") as f:
-        f.write(seal({"generatedAt": generated, "clients": reports}, CONFIG["masterKey"]))
+        f.write(seal({"generatedAt": generated, "clients": owner}, CONFIG["masterKey"]))
     for c, r in zip(clients, reports):
         # A client sees its own numbers, never the internal alerts.
         mine = {**r, "anomalies": []}

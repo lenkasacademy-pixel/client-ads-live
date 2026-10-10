@@ -65,6 +65,11 @@
   .err { color: var(--bad); font-size: 13px; }
   .center { text-align: center; padding: 80px 16px; color: var(--muted); }
   footer { margin-top: 28px; color: var(--muted); font-size: 12px; text-align: center; }
+  .share { display: flex; gap: 8px; border-top: 1px solid var(--line); padding-top: 12px; }
+  .share a, .share button { flex: 1; text-align: center; font: inherit; font-size: 13px; font-weight: 600; padding: 7px 10px; border-radius: 8px; cursor: pointer; text-decoration: none; }
+  .share a { background: var(--accent); color: #fff; border: 1px solid var(--accent); }
+  .share button { background: none; color: var(--ink); border: 1px solid var(--line); }
+  .share button.done { color: var(--good); border-color: var(--good); }
   button.theme { background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 8px; padding: 4px 10px; font: inherit; font-size: 12px; cursor: pointer; }
 </style>
 </head>
@@ -165,8 +170,26 @@ function card(r, single) {
       ${running.length > 6 ? `<div class="muted">+${running.length - 6} more</div>` : ''}
     </div>
     <div class="section">${daily}${cap}</div>
+    ${isOwner && r.key ? `<div class="share">
+      <a href="${esc(clientLink(r))}" target="_blank" rel="noopener">Open client page ↗</a>
+      <button type="button" data-copy="${esc(clientLink(r))}">Copy client link</button>
+    </div>` : ''}
   </article>`;
 }
+
+function clientLink(r) {
+  return `${location.origin}${location.pathname}?c=${encodeURIComponent(r.slug)}#k=${r.key}`;
+}
+
+document.addEventListener('click', async e => {
+  const btn = e.target.closest('button[data-copy]');
+  if (!btn) return;
+  const text = btn.dataset.copy;
+  try { await navigator.clipboard.writeText(text); }
+  catch (err) { const t = document.createElement('textarea'); t.value = text; document.body.append(t); t.select(); document.execCommand('copy'); t.remove(); }
+  btn.textContent = 'Copied ✓'; btn.classList.add('done');
+  setTimeout(() => { btn.textContent = 'Copy client link'; btn.classList.remove('done'); }, 2000);
+});
 
 async function decrypt(text, keyB64) {
   const b64 = keyB64.replace(/-/g, '+').replace(/_/g, '/');
