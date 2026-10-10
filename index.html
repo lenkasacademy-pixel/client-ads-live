@@ -25,7 +25,7 @@
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 Inter, system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
-  .wrap { max-width: 1240px; margin: 0 auto; padding: 24px 16px 48px; }
+  .wrap { max-width: 1640px; margin: 0 auto; padding: 24px 16px 48px; }
   header { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: flex-end; justify-content: space-between; margin-bottom: 20px; }
   h1 { font-size: 22px; margin: 0; letter-spacing: -0.01em; }
   .sub { color: var(--muted); font-size: 13px; }
@@ -79,17 +79,17 @@
   .item b { font-weight: 600; }
   .item .t { color: var(--c); }
   .more { background: none; border: 0; color: var(--muted); font: inherit; font-size: 13px; padding: 4px 0 0; cursor: pointer; text-decoration: underline; }
-  .mini-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); gap: 10px; }
+  .mini-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 330px), 1fr)); gap: 10px; }
   .mini { border: 1px solid var(--c); border-radius: 12px; padding: 10px 12px; background: var(--card); display: flex; flex-direction: column; gap: 3px; min-width: 0; font-size: 14px; }
   .mini .top { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 2px; }
   .mini .top b { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .mini .top span { color: var(--c); font-size: 12px; font-weight: 700; white-space: nowrap; }
   .mini .r { display: flex; gap: 8px; align-items: center; white-space: nowrap; min-width: 0; }
-  .mini .k { color: var(--muted); width: 52px; flex: none; overflow: hidden; text-overflow: ellipsis; }
+  .mini .k { color: var(--muted); width: 62px; flex: none; overflow: hidden; text-overflow: ellipsis; }
   .mini .v { overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
   .mini .v strong { font-weight: 700; }
   .mini .g { color: var(--good); font-weight: 600; }
-  .mini .mb { width: 80px; height: 14px; flex: none; background: repeating-linear-gradient(90deg, var(--track) 0 2px, transparent 2px 4px); border-radius: 2px; overflow: hidden; }
+  .mini .mb { width: 64px; height: 14px; flex: none; background: repeating-linear-gradient(90deg, var(--track) 0 2px, transparent 2px 4px); border-radius: 2px; overflow: hidden; }
   .mini .mb i { display: block; height: 100%; background: var(--b); }
   .mini .mt { color: var(--b); overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
   .mini .al { color: var(--a); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 2px; }
