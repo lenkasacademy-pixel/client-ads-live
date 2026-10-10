@@ -1,0 +1,35 @@
+name: refresh
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: refresh
+  cancel-in-progress: false
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install --quiet cryptography==43.0.3
+      - name: Fetch from Meta and encrypt
+        env:
+          META_TOKEN: ${{ secrets.META_TOKEN }}
+          CLIENTS: ${{ secrets.CLIENTS }}
+        run: python fetch.py
+      - name: Publish to the data branch
+        # Only the encrypted files, force-pushed, so history stays one commit and Pages never rebuilds.
+        run: |
+          cd out
+          git init -q -b data
+          git config user.name "ads-live-bot"
+          git config user.email "ads-live-bot@users.noreply.github.com"
+          git add .
+          git commit -q -m "data $(date -u +%FT%TZ)"
+          git push -q -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" data
