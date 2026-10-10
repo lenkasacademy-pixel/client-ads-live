@@ -234,12 +234,23 @@ function render(doc) {
   };
 }
 
+// GitHub's API always has the newest copy; the raw-file server can lag ~5 min, so it is only the fallback.
+async function latest() {
+  try {
+    const res = await fetch(`https://api.github.com/repos/${REPO}/contents/${slug}.enc?ref=data`, {
+      headers: { Accept: 'application/vnd.github.raw' }, cache: 'no-store',
+    });
+    if (res.ok) return await res.text();
+  } catch (e) {}
+  const res = await fetch(`https://raw.githubusercontent.com/${REPO}/data/${slug}.enc?t=${Date.now()}`, { cache: 'no-store' });
+  if (!res.ok) throw new Error('not found');
+  return res.text();
+}
+
 async function load() {
   if (!keyText) { app.innerHTML = '<div class="center">This link is missing its key. Ask for the full link.</div>'; return; }
   try {
-    const res = await fetch(`https://raw.githubusercontent.com/${REPO}/data/${slug}.enc?t=${Date.now()}`, { cache: 'no-store' });
-    if (!res.ok) throw new Error('not found');
-    render(await decrypt(await res.text(), keyText));
+    render(await decrypt(await latest(), keyText));
   } catch (e) {
     if (!app.querySelector('.card')) app.innerHTML = '<div class="center">Couldn’t open this report. Check that you have the full link.</div>';
   }
