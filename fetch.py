@@ -142,6 +142,27 @@ def day(account: str, preset: str, active: set[str]) -> dict:
     }
 
 
+def history(account: str, days: int = 10) -> list[dict]:
+    """Per-day spend, clicks and results for the last `days` days, today included."""
+    rows = get_all(
+        f"act_{account}/insights",
+        level="campaign",
+        date_preset="last_10d" if days == 10 else f"last_{days}d",
+        time_increment=1,
+        fields="spend,impressions,inline_link_clicks,results",
+    )
+    byday = {}
+    for r in rows:
+        d = byday.setdefault(r["date_start"], {"date": r["date_start"], "spend": 0, "clicks": 0, "impressions": 0, "results": {}})
+        d["spend"] += float(r.get("spend") or 0)
+        d["clicks"] += int(r.get("inline_link_clicks") or 0)
+        d["impressions"] += int(r.get("impressions") or 0)
+        label = label_of(((r.get("results") or [{}])[0]).get("indicator"))
+        if label:
+            d["results"][label] = d["results"].get(label, 0) + count_of(r)
+    return [byday[k] for k in sorted(byday)]
+
+
 def money(v) -> float:
     """Budgets and caps come in paise."""
     return float(v or 0) / 100
@@ -214,6 +235,7 @@ def client_report(client: dict, hour: int) -> dict:
         "yesterday": yesterday,
         "cap": {"limit": cap, "spent": money(account.get("amount_spent"))} if cap > 0 else None,
         "anomalies": anomalies(today, yesterday, week, active, rejected, hour),
+        "history": history(acct),
         "error": None,
     }
 

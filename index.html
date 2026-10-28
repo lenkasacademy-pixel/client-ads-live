@@ -191,6 +191,7 @@ function card(r, single) {
         ${row('CPM', cpm(y), cpm(t))}
       </tbody>
     </table>
+    ${historyTable(r)}
     ${alerts ? `<div class="section"><h3>Alerts</h3>${alerts}</div>` : ''}
     <div class="section"><h3>Running today</h3>
       ${running.length ? running.slice(0, 6).map(c => `<div class="camp ${c.status === 'ACTIVE' ? '' : 'off'}"><span class="n" title="${esc(c.name)}">${esc(c.name)}</span><span class="v">${rupees(c.spend)}${c.results ? ' · ' + num(c.results) : ''}</span></div>`).join('') : '<div class="muted">Nothing spending yet today</div>'}
@@ -202,6 +203,22 @@ function card(r, single) {
       <button type="button" data-copy="${esc(clientLink(r))}">Copy client link</button>
     </div>` : ''}
   </article>`;
+}
+
+function historyTable(r) {
+  const days = r.history || [];
+  if (!days.length) return '';
+  const label = [...new Set(days.flatMap(d => Object.keys(d.results)))][0];
+  const when = s => new Date(s + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+  const rows = [...days].reverse().map(d => {
+    const n = label ? (d.results[label] || 0) : 0;
+    return `<tr><td>${when(d.date)}</td><td>${rupees(d.spend)}</td><td>${num(d.clicks)}</td><td>${label ? num(n) : '—'}</td><td>${n ? rupees(d.spend / n) : '—'}</td></tr>`;
+  }).join('');
+  const sum = k => days.reduce((a, d) => a + d[k], 0);
+  const total = label ? days.reduce((a, d) => a + (d.results[label] || 0), 0) : 0;
+  return `<div class="section"><h3>Last 10 days${label ? ' · ' + esc(short(label)) : ''}</h3>
+    <table class="hist"><thead><tr><th>Day</th><th>Spend</th><th>Clicks</th><th>${label ? esc(short(label)) : 'Results'}</th><th>Cost each</th></tr></thead>
+    <tbody>${rows}<tr class="result"><td>Total</td><td>${rupees(sum('spend'))}</td><td>${num(sum('clicks'))}</td><td>${num(total)}</td><td>${total ? rupees(sum('spend') / total) : '—'}</td></tr></tbody></table></div>`;
 }
 
 function clientLink(r) {
