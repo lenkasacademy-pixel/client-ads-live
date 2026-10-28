@@ -144,10 +144,11 @@ def day(account: str, preset: str, active: set[str]) -> dict:
 
 def history(account: str, days: int = 10) -> list[dict]:
     """Per-day spend, clicks and results for the last `days` days, today included."""
+    now = datetime.now(timezone(timedelta(hours=5, minutes=30)))
     rows = get_all(
         f"act_{account}/insights",
         level="campaign",
-        date_preset="last_10d" if days == 10 else f"last_{days}d",
+        time_range=json.dumps({"since": (now - timedelta(days=days - 1)).strftime("%Y-%m-%d"), "until": now.strftime("%Y-%m-%d")}),
         time_increment=1,
         fields="spend,impressions,inline_link_clicks,results",
     )
@@ -161,6 +162,14 @@ def history(account: str, days: int = 10) -> list[dict]:
         if label:
             d["results"][label] = d["results"].get(label, 0) + count_of(r)
     return [byday[k] for k in sorted(byday)]
+
+
+def safe_history(account: str) -> list[dict]:
+    try:
+        return history(account)
+    except Exception as err:  # the card still works without the table
+        print(f"history failed for {account}: {err}", file=sys.stderr)
+        return []
 
 
 def money(v) -> float:
@@ -235,7 +244,7 @@ def client_report(client: dict, hour: int) -> dict:
         "yesterday": yesterday,
         "cap": {"limit": cap, "spent": money(account.get("amount_spent"))} if cap > 0 else None,
         "anomalies": anomalies(today, yesterday, week, active, rejected, hour),
-        "history": history(acct),
+        "history": safe_history(acct),
         "error": None,
     }
 
