@@ -97,6 +97,7 @@
   .mini .links a, .mini .links button { color: var(--muted); background: none; border: 0; padding: 0; font: inherit; cursor: pointer; text-decoration: none; }
   .mini .links a:hover, .mini .links button:hover { color: var(--accent); }
   .mini .links button.done { color: var(--good); }
+  h2.group { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 22px 0 10px; font-weight: 600; }
   button.theme { background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 8px; padding: 4px 10px; font: inherit; font-size: 12px; cursor: pointer; }
 </style>
 </head>
@@ -322,9 +323,15 @@ function mini(r) {
 }
 
 let showAllAlerts = false;
+/** Running ads today: it has spent today, or has a live daily or lifetime budget. */
+const isActive = r => (r.today?.spend || 0) > 0 || (!r.isOwnLimit && (r.limit || 0) > 0) || !!r.hasLifetime;
+
 function renderOwner(doc) {
-  const list = [...doc.clients].sort((a, b) => ownerStatus(a).rank - ownerStatus(b).rank ||
+  // Running clients first, most urgent at the top; the rest below.
+  const list = [...doc.clients].sort((a, b) => Number(isActive(b)) - Number(isActive(a)) ||
+    ownerStatus(a).rank - ownerStatus(b).rank ||
     ((b.today?.spend || 0) + (b.yesterday?.spend || 0)) - ((a.today?.spend || 0) + (a.yesterday?.spend || 0)));
+  const running = list.filter(isActive), stopped = list.filter(r => !isActive(r));
   const gen = new Date(doc.generatedAt);
   const ageMin = (Date.now() - gen) / 60000;
   const ist = d => new Date(d).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false });
@@ -381,7 +388,8 @@ function renderOwner(doc) {
       </div>
     </header>
     ${alertPanel}${salesPanel}${hourPanel}
-    <div class="mini-grid">${list.map(mini).join('')}</div>
+    ${running.length ? `<h2 class="group">Running now · ${running.length}</h2><div class="grid">${running.map(r => card(r)).join('')}</div>` : ''}
+    ${stopped.length ? `<h2 class="group">Not running · ${stopped.length}</h2><div class="mini-grid">${stopped.map(mini).join('')}</div>` : ''}
     <footer>Numbers from Meta Ads; "today" can lag Meta by 15–30 min. <button class="theme" id="theme">Light / dark</button></footer>`;
   const more = document.getElementById('more');
   if (more) more.onclick = () => { showAllAlerts = !showAllAlerts; renderOwner(doc); };
